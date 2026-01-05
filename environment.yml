@@ -1,0 +1,42 @@
+# Conda environment for stutter-asr-eval
+#
+# Create environment:
+#   conda env create -f environment.yml
+#
+# Activate environment:
+#   conda activate asr-eval-env
+#
+# Update environment:
+#   conda env update -f environment.yml --prune
+
+name: asr-eval-env
+
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Python version
+  - python=3.11
+
+  # Core ML dependencies (conda for better compatibility)
+  - pytorch>=2.0
+  - torchaudio>=2.0
+  - numpy>=1.24
+
+  # Audio processing
+  - ffmpeg
+  - librosa>=0.10
+
+  # Data handling
+  - pandas>=2.0
+  - pyyaml>=6.0
+
+  # Development tools
+  - pip
+
+  # Pip dependencies (not available or better via pip)
+  - pip:
+    # Project installation (editable)
+    - -e ".[whisper,faster-whisper,semantic,dev]"

@@ -1,0 +1,131 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stutter-asr-eval"
+version = "0.1.0"
+description = "Evaluating and fine-tuning ASR models on stuttered speech"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Liam Barrett" },
+]
+keywords = ["asr", "speech-recognition", "stuttering", "accessibility"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "numpy>=1.24.0",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+    "transformers>=4.35.0",
+    "librosa>=0.10.0",
+    "jiwer>=3.0.0",
+    "pyyaml>=6.0",
+    "tqdm>=4.65.0",
+    "pandas>=2.0.0",
+]
+
+[project.optional-dependencies]
+# Local model inference
+whisper = [
+    "openai-whisper>=20231117",
+]
+faster-whisper = [
+    "faster-whisper>=1.0.0",
+]
+
+# Commercial APIs
+google = [
+    "google-cloud-speech>=2.21.0",
+]
+azure = [
+    "azure-cognitiveservices-speech>=1.32.0",
+]
+amazon = [
+    "boto3>=1.28.0",
+]
+assemblyai = [
+    "assemblyai>=0.20.0",
+]
+deepgram = [
+    "deepgram-sdk>=3.0.0",
+]
+
+# Semantic metrics
+semantic = [
+    "bert-score>=0.3.13",
+]
+
+# Fine-tuning
+finetune = [
+    "peft>=0.7.0",
+    "accelerate>=0.25.0",
+    "datasets>=2.15.0",
+]
+
+# Development
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+    "pre-commit>=3.5.0",
+]
+
+# All dependencies
+all = [
+    "stutter-asr-eval[whisper,faster-whisper,google,azure,amazon,assemblyai,deepgram,semantic,finetune,dev]",
+]
+
+[project.scripts]
+stutter-eval = "src.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/liambarrett/stutter-asr-eval"
+Documentation = "https://github.com/liambarrett/stutter-asr-eval#readme"
+Repository = "https://github.com/liambarrett/stutter-asr-eval"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[tool.ruff.isort]
+known-first-party = ["src"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --cov=src --cov-report=term-missing"

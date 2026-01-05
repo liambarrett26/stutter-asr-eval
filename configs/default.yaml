@@ -1,0 +1,64 @@
+# Default configuration for stutter-asr-eval
+
+# ASR models to evaluate
+models:
+  # Open-source models (run locally)
+  - name: whisper-large-v3
+    type: whisper
+    variant: large-v3
+    device: auto
+
+  - name: whisper-medium
+    type: whisper
+    variant: medium
+    device: auto
+
+  - name: faster-whisper-large-v3
+    type: faster-whisper
+    variant: large-v3
+    device: auto
+
+  - name: wav2vec2-large
+    type: wav2vec2
+    variant: facebook/wav2vec2-large-960h-lv60-self
+    device: auto
+
+  - name: hubert-large
+    type: hubert
+    variant: facebook/hubert-large-ls960-ft
+    device: auto
+
+  # Commercial APIs
+  - name: google-stt
+    type: api
+    variant: google
+    api_key_env: GOOGLE_APPLICATION_CREDENTIALS
+
+  - name: azure-stt
+    type: api
+    variant: azure
+    api_key_env: AZURE_SPEECH_KEY
+
+  - name: assemblyai
+    type: api
+    variant: assemblyai
+    api_key_env: ASSEMBLYAI_API_KEY
+
+  - name: deepgram-nova3
+    type: api
+    variant: deepgram
+    api_key_env: DEEPGRAM_API_KEY
+
+# Evaluation settings
+evaluation:
+  metrics:
+    - wer
+    - cer
+    - semantic_similarity
+  normalize_text: true
+  calculate_semantic: true
+  semantic_model: microsoft/deberta-xlarge-mnli
+
+# Data directories
+data_dir: data
+output_dir: results

@@ -1,0 +1,68 @@
+# Full conda environment for stutter-asr-eval with all optional dependencies
+#
+# Create environment:
+#   conda env create -f environment-full.yml
+#
+# This includes all ASR models (Whisper, Faster-Whisper), semantic metrics,
+# and development tools. Commercial APIs require separate API key setup.
+
+name: asr-eval-env
+
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Python version
+  - python=3.11
+
+  # Core ML dependencies
+  - pytorch>=2.0
+  - torchaudio>=2.0
+  - numpy>=1.24
+
+  # Audio processing
+  - ffmpeg
+  - librosa>=0.10
+
+  # Data handling
+  - pandas>=2.0
+  - pyyaml>=6.0
+
+  # Progress bars
+  - tqdm>=4.65
+
+  # Development tools
+  - pip
+
+  - pip:
+    # Core ASR evaluation
+    - transformers>=4.35.0
+    - jiwer>=3.0.0
+
+    # Whisper models
+    - openai-whisper>=20231117
+    - faster-whisper>=1.0.0
+
+    # Semantic metrics
+    - bert-score>=0.3.13
+
+    # Development and testing
+    - pytest>=7.4.0
+    - pytest-cov>=4.1.0
+    - ruff>=0.1.0
+    - mypy>=1.7.0
+    - pre-commit>=3.5.0
+
+    # Commercial APIs (optional - uncomment as needed)
+    # - google-cloud-speech>=2.21.0
+    # - azure-cognitiveservices-speech>=1.32.0
+    # - boto3>=1.28.0
+    # - assemblyai>=0.20.0
+    # - deepgram-sdk>=3.0.0
+
+    # Fine-tuning (optional - uncomment if needed)
+    # - peft>=0.7.0
+    # - accelerate>=0.25.0
+    # - datasets>=2.15.0
