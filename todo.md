@@ -14,16 +14,25 @@ This document outlines the research plan for a high-impact journal article inves
   - Use FluencyBank Timestamped version (Romana et al. 2024) if available
 
 - [ ] **UCLASS** - UCL Archive of Stuttered Speech
-  - Contact UCL Speech Lab for access (limited word-level transcriptions, ~15 recordings)
   - Quality check transcripts against ASR outputs for baseline quality assessment
 
 - [ ] **SEP-28k** - For stutter event labels (not full transcriptions)
   - Publicly available, use for stutter-type annotations
   - ~28k clips with event-type labels (blocks, prolongations, repetitions)
 
-- [ ] **SLASS** - Speech Lab Archive of Stuttered Speech (UCL internal)
-  - Investigate availability and transcription status
-  - Potential for ~1000 recordings if transcriptions can be obtained
+- [x] **SLASS** - Speech Lab Archive of Stuttered Speech (UCL internal)
+  - Located on external drives: `/Volumes/FATSPEECH/speech_sfs/` (9,961 SFS files, 110GB) and `/Volumes/SPEECH/from_jason/` (curated subsets)
+  - SFS binary format reverse-engineered; extraction script at `src/data/extract_sfs.py`
+  - Curated subset in `from_jason/`: Persistent (8-10, 10-12, 12+), Recovered, and Fluent control groups
+  - 66 sessions with orthographic + stutter transcripts already in `Speech data Jason/input/`
+  - Rich annotation layers per SFS file: orthographic, stutter, syllables, type, clause, PW, rhyme
+  - Sample rates vary (10kHz, 20kHz, 22.05kHz, 24kHz, 44.1kHz); both big- and little-endian files
+  - [ ] Run batch extraction on curated `from_jason/` subsets (audio + orthographic + stutter layers)
+  - [ ] Validate extracted WAV audio against known-good exports (spot-check playback)
+  - [ ] Cross-reference extracted orthographic annotations with existing `Speech data Jason/input/` transcripts
+  - [ ] Decide on target sample rate for resampling (16kHz standard for ASR)
+  - [ ] Build SLASS metadata catalogue: speaker ID, gender, age, group (persistent/recovered/fluent), severity
+  - [ ] Assess feasibility of batch-extracting from full 9,961-file archive on FATSPEECH
 
 ### 1.2 Fluent Speech Control Dataset
 
