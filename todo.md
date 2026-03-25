@@ -8,13 +8,52 @@ This document outlines the research plan for a high-impact journal article inves
 
 ### 1.1 Obtain Stuttered Speech Corpora
 
-- [ ] **FluencyBank** - Primary English benchmark
-  - Contact TalkBank/FluencyBank maintainers for access
-  - Contains speech from adults who stutter with transcriptions
-  - Use FluencyBank Timestamped version (Romana et al. 2024) if available
+- [x] **FluencyBank** - Primary English benchmark
+  - TalkBank account registered; auth requires browser cookie (HttpOnly, expires ~24h)
+  - Transcript zips downloaded to `/Volumes/FATSPEECH/fluencybank/raw/` (8 corpora):
+    - **Voices-AWS** (66MB): 57 interview + 45 reading sessions, adults who stutter, CHAT format with timestamps + morphology + dependency parse
+    - **Voices-CWS** (62MB): 26 interview + 22 reading sessions, children who stutter
+    - **Voices-AWC** (6.4MB): 3 adults who clutter (interview + reading + stuttering samples)
+    - **UMD-CMU** (1.8MB): 15 CWS + 15 controls, longitudinal conversation with mothers
+    - **Hakim** (273K): 8 CWS + 8 controls, nonword repetition
+    - **Examples** (4K), **VanZaalen** (19K), **Brejon** (205K, French)
+  - CHAT files contain utterance-level timestamps (ms), speaker labels (*PAR/*INV), disfluency markers
+  - Romana et al. (2024) improved timestamped version not available (no response to emails)
+  - [ ] Download media (MP4 video) files — in progress (~302 files, ~12.9GB estimated); download script at `src/data/download_fluencybank_media.py`
+  - [ ] Extract audio from MP4 videos with ffmpeg (→ 16kHz mono WAV)
+  - [x] Write CHAT transcript parser (`src/data/parse_chat.py`): extracts speaker utterances, parses \x15-delimited timestamps, strips CHAT coding to clean text, exports aligned CSV + flat text
+  - [x] Process all FluencyBank transcripts: 346 CHAT files → 61,035 utterances (55,003 with timestamps) across 8 corpora; output in `/Volumes/FATSPEECH/fluencybank/processed/`
+  - [ ] Build FluencyBank inventory CSV (speakers, ages, gender, tasks, transcript/media availability)
+  - FluencyBank README at `/Volumes/FATSPEECH/fluencybank/README.md` and `data/fluencybank.md`
 
-- [ ] **UCLASS** - UCL Archive of Stuttered Speech
-  - Quality check transcripts against ASR outputs for baseline quality assessment
+- [x] **UCLASS** - UCL Archive of Stuttered Speech
+  - Downloaded to `/Volumes/FATSPEECH/uclass/` (~6GB total); see `README.md` there for full structure and audit
+  - **Release 1** (2004): 138 WAV monologues, 81 speakers (12F, 69M), ages 5–47
+    - 49 sessions have transcripts: 31 ortho + 25 phonetic + 16 TextGrid + 14 SFS with embedded stutter annotations
+    - SFS annotated files contain rich disfluency-coded phonetic data (18,019 annotation records)
+  - **Release 2** (2008): 82 monologue + 107 reading + 128 conversation WAVs; 85 speakers
+    - Very few transcripts: 4 monologue ortho, 2 monologue SFS aligned, 2 reading ortho
+  - **Release FSF**: 56 SFS files, 14 speakers × 4 conditions, read passages (known reference text)
+  - **46 speakers overlap** between R1 and R2 (longitudinal recordings)
+  - SFS transcription conventions documented in `docs/sfs_transcription_conventions.md`
+  - Full Howell & Huckvale (2004) paper converted to `docs/howell_huckvale_2004_sfs_transcription.md`
+  - SFS annotation parser (`src/data/extract_sfs.py`) updated to handle anonymised UCLASS history strings
+  - SFS annotation audit written to `/Volumes/FATSPEECH/uclass/audit_sfs_annotations.csv`
+  - [x] Unzip all audio archives on FATSPEECH
+  - [x] Audit SFS files for embedded annotations (found 14 R1 + 2 R2 = 16 annotated files)
+  - [x] Identify speaker overlap between R1 and R2 (46 shared speakers)
+  - [x] Parse R1 TextGrid files into standardised CSV format (33 files → `processed/transcripts/aligned/`)
+  - [x] Extract annotations from SFS files into standardised CSV format (16 files → `processed/transcripts/aligned/`)
+  - [x] Convert flat ortho/phon transcripts to standardised CSV (64 files → `processed/transcripts/flat/`)
+  - [x] Build unified UCLASS inventory CSV (`processed/inventory.csv`: 304 sessions, 56 usable with audio+transcript)
+  - [x] Build speaker metadata CSV (`processed/speakers.csv`: 120 speakers with age range, releases, task types)
+  - Processing script: `src/data/process_uclass.py`
+  - 16 sessions have both TextGrid and SFS annotations (cross-validation possible)
+  - [x] Enrich metadata with info page fields (`processed/sessions_metadata.csv`: 304 sessions with handedness, onset age, therapy type, language, quality scores, recording location)
+  - [x] Flag non-English speakers: 13 sessions across 9 languages (Arabic x5, French, Italian, Punjabi, Somali, Tamil, Turkish, Urdu, Yoruba) — flagged in `inventory.csv` as `is_l2=True`, kept in dataset for sub-analysis
+  - [x] Extract FSF audio: 56 SFS files to WAV (`processed/fsf_audio/`), 2.1h total
+  - [x] Fix SFS parser for M_0061 and M_1102 (mixed-endian detection: marker vs actual data endianness)
+  - [x] Cross-validate TextGrid vs SFS annotations for 15 overlapping sessions: **TextGrid timestamps are correct** (match WAV duration); SFS annotation timestamps are scaled incorrectly (different sample rate origin). Same labels, wrong timescale. See `processed/transcripts/TIMESTAMP_NOTES.md`
 
 - [ ] **SEP-28k** - For stutter event labels (not full transcriptions)
   - Publicly available, use for stutter-type annotations
@@ -27,12 +66,14 @@ This document outlines the research plan for a high-impact journal article inves
   - 66 sessions with orthographic + stutter transcripts already in `Speech data Jason/input/`
   - Rich annotation layers per SFS file: orthographic, stutter, syllables, type, clause, PW, rhyme
   - Sample rates vary (10kHz, 20kHz, 22.05kHz, 24kHz, 44.1kHz); both big- and little-endian files
-  - [ ] Run batch extraction on curated `from_jason/` subsets (audio + orthographic + stutter layers)
+  - [x] Batch extraction on curated `from_jason/` subsets: 148/148 files, 0 failures, 9.1h audio, 882 annotation layers, 62 speakers → `/Volumes/FATSPEECH/slass/processed/`
+  - [x] Build SLASS metadata: `processed/inventory.csv` (148 sessions) + `processed/speakers.csv` (62 speakers with fluency group, age range)
+  - SLASS README at `/Volumes/FATSPEECH/slass/README.md` and `data/slass.md`
+  - [x] **Full archive extraction**: 9,780/9,961 files in 6.1 min → `/Volumes/FATSPEECH/slass/full_archive/` (84.1GB audio, 329.6h, 6,159 with annotations, 683 with orthographic, 236 with stutter, 181 parse errors)
   - [ ] Validate extracted WAV audio against known-good exports (spot-check playback)
-  - [ ] Cross-reference extracted orthographic annotations with existing `Speech data Jason/input/` transcripts
+  - [ ] Cross-reference extracted orthographic annotations with existing `Speech data Jason/input/` transcripts (66 sessions)
+  - [ ] Cross-reference extracted annotations with `Speech data Jason/output/` usage matrices (68 CSVs with per-word linguistic features)
   - [ ] Decide on target sample rate for resampling (16kHz standard for ASR)
-  - [ ] Build SLASS metadata catalogue: speaker ID, gender, age, group (persistent/recovered/fluent), severity
-  - [ ] Assess feasibility of batch-extracting from full 9,961-file archive on FATSPEECH
 
 ### 1.2 Fluent Speech Control Dataset
 
@@ -279,7 +320,7 @@ Critical methodological contribution - reference choice affects rankings:
 - [ ] Results with statistical analysis
 - [ ] Discussion of implications for accessibility
 - [ ] Prepare supplementary materials and code release
-- [ ] Target venue: JSLHR, IEEE TASLP, or Interspeech/ICASSP
+- [ ] Target venue: Nature Comms, Nature Machine Intell., JSLHR, IEEE TASLP, or Interspeech/ICASSP
 
 ---
 

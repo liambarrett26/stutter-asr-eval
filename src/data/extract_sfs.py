@@ -71,13 +71,30 @@ class SFSFile:
 # ── Low-level parsing ────────────────────────────────────────────────────────
 
 def _detect_endianness(data: bytes) -> str:
-    """Detect endianness from the format marker at offset 0x1C."""
+    """Detect endianness from the format marker at offset 0x1C.
+
+    Some files (e.g. UCLASS M_0061) have a marker that disagrees with the
+    actual data layout.  We therefore *validate* the marker's claim by checking
+    that it yields a sane sample period; if not, we try the other endianness.
+    """
     marker = data[0x1C:0x20]
+    # Preferred order based on marker
     if marker == b"sfs\x00":
-        return "big"
+        candidates = [("big", ">"), ("little", "<")]
     elif marker == b"SFS\x00":
-        return "little"
-    # Fallback heuristic: try both and pick the one giving a sane sample rate
+        candidates = [("little", "<"), ("big", ">")]
+    else:
+        candidates = [("little", "<"), ("big", ">")]
+
+    for endian, fmt in candidates:
+        try:
+            period = struct.unpack(f"{fmt}d", data[0x3A0:0x3A8])[0]
+            if 1e-6 < period < 1:
+                return endian
+        except struct.error:
+            continue
+
+    # Original fallback (should not reach here given the above)
     for endian, fmt in [("little", "<"), ("big", ">")]:
         try:
             period = struct.unpack(f"{fmt}d", data[0x3A0:0x3A8])[0]
@@ -182,9 +199,23 @@ def parse_sfs(filepath: str | Path) -> SFSFile:
         n_records = struct.unpack("<I", data[hdr + 0x18 : hdr + 0x1C])[0]
         n_bytes = struct.unpack("<I", data[hdr + 0x1C : hdr + 0x20])[0]
 
-        # Skip non-annotation items (e.g. formant tracks)
+        # Determine if this item is an annotation layer.
+        # Known patterns: "Eswin/AN(type=orthographic)", "AN(type=stutter)"
+        # UCLASS anonymised files use "History deleted - participant anonymity"
+        # Heuristic: formant tracks (FM) have very large record counts relative
+        # to byte size; annotation records average ~12 bytes each.
         data_start = pos + _ITEM_HEADER_LEN
-        if "AN(" in history or "AN " in history:
+        is_annotation = "AN(" in history or "AN " in history
+        if not is_annotation and n_records > 0 and n_bytes > 0:
+            avg_rec_size = n_bytes / n_records
+            # Annotation records are typically 8–30 bytes; formant frames are 4–8
+            # bytes with thousands of records per second of audio.
+            is_annotation = 5 < avg_rec_size < 200 and n_records < 50000
+            # Also exclude known non-annotation item types
+            if any(tag in history for tag in ("FM(", "formanal", "/FX", "/TX")):
+                is_annotation = False
+
+        if is_annotation:
             records = _parse_annotation_records(
                 data, data_start, n_records, sample_rate
             )
