@@ -32,6 +32,12 @@ DOWNLOADS = [
     ("Voices-AWC", "interview"),
     ("Voices-AWC", "reading"),
     ("Voices-AWC", "stuttering"),
+    ("UMD-CMU", "CWS"),
+    ("UMD-CMU", "Control"),
+    ("Hakim", "CWS/LS"),
+    ("Hakim", "CWS/Nonword"),
+    ("Hakim", "TD/LS"),
+    ("Hakim", "TD/Nonword"),
 ]
 
 

@@ -19,8 +19,8 @@ This document outlines the research plan for a high-impact journal article inves
     - **Examples** (4K), **VanZaalen** (19K), **Brejon** (205K, French)
   - CHAT files contain utterance-level timestamps (ms), speaker labels (*PAR/*INV), disfluency markers
   - Romana et al. (2024) improved timestamped version not available (no response to emails)
-  - [ ] Download media (MP4 video) files — in progress (~302 files, ~12.9GB estimated); download script at `src/data/download_fluencybank_media.py`
-  - [ ] Extract audio from MP4 videos with ffmpeg (→ 16kHz mono WAV)
+  - [x] Download media (MP4 video) files: 305/302 files, 130.1 GB, verified (spot-check 20 files, 1 truncation found and repaired). Download script at `src/data/download_fluencybank_media.py`
+  - [x] Extract audio from MP4 videos: 270 WAV files, 46.9 hours, 5.0 GB (16kHz mono) → `/Volumes/FATSPEECH/fluencybank/processed/audio/`; 1 corrupt file re-downloaded and fixed
   - [x] Write CHAT transcript parser (`src/data/parse_chat.py`): extracts speaker utterances, parses \x15-delimited timestamps, strips CHAT coding to clean text, exports aligned CSV + flat text
   - [x] Process all FluencyBank transcripts: 346 CHAT files → 61,035 utterances (55,003 with timestamps) across 8 corpora; output in `/Volumes/FATSPEECH/fluencybank/processed/`
   - [x] Build FluencyBank inventory: 332 sessions, 113 speakers (`processed/inventory.csv` + `processed/speakers.csv`); Voices-AWS 13.2h/51 spk, Voices-CWS 3.4h/17 spk, UMD-CMU 37.6h/29 spk, Hakim 6.1h/13 spk
@@ -74,9 +74,16 @@ This document outlines the research plan for a high-impact journal article inves
 
 ### 1.2 Fluent Speech Control Dataset
 
-- [ ] **LibriSpeech** - Fluent baseline
-  - Use test-clean and test-other splits for comparison
-  - Enables quantification of PWS vs non-PWS performance gap
+- [x] **LibriSpeech** - Fluent baseline
+  - Downloaded to `/Volumes/FATSPEECH/librispeech/LibriSpeech/` (2.1 GB extracted)
+  - **test-clean**: 40 speakers, 2,620 FLAC files, 532 MB (~5.4h)
+  - **test-other**: 33 speakers, 2,939 FLAC files, 544 MB (~5.3h)
+  - **dev-clean**: 40 speakers, 2,703 FLAC files, 538 MB (~5.4h) — for parameter tuning
+  - **dev-other**: 33 speakers, 2,864 FLAC files, 517 MB (~5.1h) — for parameter tuning
+  - Format: FLAC audio (16kHz) + `.trans.txt` reference transcripts (uppercase, clean)
+  - Speaker metadata in `SPEAKERS.TXT` (ID, gender, subset, minutes)
+  - Note: models likely trained on LibriSpeech training splits — test performance represents best-case fluent ceiling. This is desirable for quantifying the PWS vs non-PWS gap (conservative estimate).
+  - Training splits (960h, ~59GB) deferred to Phase 6 fine-tuning if needed
 
 ### 1.3 Data Preparation Pipeline
 
