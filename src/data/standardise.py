@@ -87,10 +87,19 @@ def classify_sfs_stutter(label: str) -> str:
         [:/word]        = intended form (presence indicates disfluent production)
         repeated chars  = prolongation (e.g., MMMMM, IIIII)
 
-    Returns one of: block, repetition, prolongation, filled_pause,
-    hesitation, or combinations joined with '+' (e.g., 'block+repetition').
+    Returns one of: block, pwr, wwr, prolongation, filled_pause,
+    hesitation, or combinations joined with '+' (e.g., 'block+pwr').
     Returns 'fluent' if no disfluency markers are present.
     Returns '' for boundary markers.
+
+    Note on PWR vs WWR: {xN} markers are taken as evidence of sub-phoneme
+    repetition (PWR), while space-separated repeated segments within a
+    single annotation are taken as whole-fragment repetition (WWR). If
+    both are present, PWR dominates (the {xN} portion is what carries
+    the disfluency). WWRs that the annotator spread across multiple
+    annotation entries are not detected here; the earlier
+    consecutive-ortho-token lookback was dropped because it over-fired
+    on fluent repetitions (list reading, backchannel, restarts).
     """
     if label in ("x", "X"):
         return ""
@@ -116,13 +125,20 @@ def classify_sfs_stutter(label: str) -> str:
         if "block" not in types:
             types.append("block")
 
-    # Repetitions: {xN} markers or space-separated repeated segments
-    if re.search(r"\{x\d+\}", label):
-        types.append("repetition")
-    # Also detect repeated characters with spaces: "AA AA AA"
-    if re.search(r"(\b\w+)\s+\1", label):
-        if "repetition" not in types:
-            types.append("repetition")
+    # Repetitions, distinguished by encoding:
+    #   {xN} markers mark sub-phoneme repetition within a single segment
+    #   so should resolve to PWR.
+    #   Space-separated repeated segments (e.g. "AA AA AA", "I I") mark
+    #   a whole-fragment repetition encoded within one annotation span
+    #   so should resolve to WWR. If both are present (e.g. "AA AA {x6}n"
+    #   for an 'and' production), the {xN} portion dominates because the
+    #   sub-phoneme repetition is what carries the disfluency.
+    has_xN = bool(re.search(r"\{x\d+\}", label))
+    has_space_rep = bool(re.search(r"(\b\w+)\s+\1", label))
+    if has_xN:
+        types.append("pwr")
+    elif has_space_rep:
+        types.append("wwr")
 
     # Prolongations: 4+ consecutive identical characters
     if re.search(r"(\w)\1{3,}", label):
@@ -329,26 +345,16 @@ def standardise_slass_session(
                 best_dist = dist
         return best
 
-    # Detect WWR: consecutive identical words in the orthographic layer
-    # Build a set of timestamps where WWR occurs
-    wwr_timestamps = set()
-    ortho_words = [(r["time"], strip_sfs_orthographic(r["label"]).upper())
-                   for r in ortho_records if r["label"] not in ("x", "X", "Q", "")]
-    i = 0
-    while i < len(ortho_words) - 1:
-        if (ortho_words[i][1] == ortho_words[i + 1][1]
-                and ortho_words[i][1]):
-            # Mark all instances in the run as WWR
-            run_start = i
-            while (i + 1 < len(ortho_words)
-                   and ortho_words[i + 1][1] == ortho_words[run_start][1]):
-                i += 1
-            # Mark all but the last (which is the "successful" production)
-            for j in range(run_start, i):
-                wwr_timestamps.add(ortho_words[j][0])
-            i += 1
-        else:
-            i += 1
+    # WWR detection is delegated to the stutter-layer classifier.
+    # Earlier versions of this pipeline inferred WWR from consecutive
+    # identical orthographic-layer tokens, but that over-fired on
+    # legitimate fluent repetitions (list reading, backchannel,
+    # sentence restarts) and inflated WWR counts to ~60% of the
+    # disfluent set. We now trust whatever the SFS annotator marked
+    # on the stutter layer; cross-token WWRs that the annotator did
+    # not collapse into a single annotation span are accepted as a
+    # known limitation and counted as fluent here. See
+    # results/eda/responses_3_to_pete.md for the discussion.
 
     unified = []
     for rec in ortho_records:
@@ -366,16 +372,10 @@ def standardise_slass_session(
         surface = intended  # Same English word — surface vs intended differ only in stutter_type
         stype = ""
 
-        # Check for WWR first (consecutive identical words in ortho layer)
-        if rec["time"] in wwr_timestamps:
-            stype = "wwr"
-        elif stutter_records:
+        if stutter_records:
             match = find_nearest(stutter_records, time_s)
             if match:
                 stype = classify_sfs_stutter(match["label"])
-                # Refine: if classifier said "repetition", it's PWR (not WWR,
-                # since we already caught WWR above from consecutive ortho words)
-                stype = stype.replace("repetition", "pwr")
                 # For filled pauses, the surface text IS different (um, er)
                 filled = re.match(r"^\((\w+)\)\.?$", match["label"])
                 if filled:
@@ -562,7 +562,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Standardise transcripts across corpora")
-    parser.add_argument("--corpus", choices=["slass", "uclass", "fluencybank", "librispeech", "all"], default="all")
+    parser.add_argument("--corpus", choices=["slass", "uclass", "fluencybank", "librispeech", "unwr", "all"], default="all")
     parser.add_argument("--output", type=Path, default=Path("/Volumes/FATSPEECH/standardised"))
     args = parser.parse_args()
 
@@ -583,6 +583,10 @@ def main():
     if args.corpus in ("librispeech", "all"):
         print("Standardising LibriSpeech...")
         _standardise_all_librispeech(args.output / "librispeech")
+
+    if args.corpus in ("unwr", "all"):
+        print("Standardising UNWR...")
+        _standardise_all_unwr(args.output / "unwr")
 
 
 def _standardise_all_slass(output_dir: Path):
@@ -716,6 +720,77 @@ def _standardise_all_librispeech(output_dir: Path):
         write_unified_csv(all_records, output_dir / f"{split}.csv")
 
     print(f"  LibriSpeech: {total_files} trans files, {total_records} records -> {output_dir}")
+
+
+def _standardise_all_unwr(output_dir: Path):
+    """Standardise UNWR (adult SSI cohort) transcripts.
+
+    UNWR provides one transcript per speaker (covering q1 + q2 SSI
+    recording) and a session-level SSI % stuttered syllables score
+    rather than per-word annotations. We emit one row per speaker
+    with text_intended = period-stripped clean text and store the
+    SSI percentage in stutter_type as 'ssi_pct=<value>' for
+    downstream filtering.
+    """
+    proc_dir = Path("/Volumes/FATSPEECH/unwr/processed")
+    transcripts_dir = proc_dir / "transcripts"
+    speakers_csv = proc_dir / "speakers.csv"
+
+    # Build PID -> ssi_pct map for severity flags in stutter_type.
+    ssi_by_pid: dict[str, str] = {}
+    group_by_pid: dict[str, str] = {}
+    if speakers_csv.exists():
+        with speakers_csv.open(encoding="utf-8") as fh:
+            for r in csv.DictReader(fh):
+                pid = (r.get("pid") or "").strip()
+                if not pid:
+                    continue
+                ssi_by_pid[pid] = (r.get("ssi_pct") or "").strip()
+                group_by_pid[pid] = (r.get("all_data_group")
+                                     or r.get("group_directory")
+                                     or "").strip()
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    total_records = 0
+    total_files = 0
+    for trans_csv in sorted(transcripts_dir.glob("*.csv")):
+        if trans_csv.name.startswith("."):
+            continue
+        pid = trans_csv.stem.upper()
+        with trans_csv.open(encoding="utf-8") as fh:
+            row = next(csv.DictReader(fh), None)
+        if not row:
+            continue
+        clean = (row.get("text") or "").strip()
+        syll = (row.get("text_syllabified") or "").strip()
+        ssi_pct = ssi_by_pid.get(pid, "")
+        group = group_by_pid.get(pid, "")
+        # Encode SSI severity + group as session-level metadata in stutter_type.
+        # Per-word stutter labels are unavailable for UNWR (no SFS/CHAT layer);
+        # ssi_pct is the closest signal we have.
+        stutter_field = ""
+        if ssi_pct:
+            stutter_field = f"ssi_pct={ssi_pct}"
+        if group:
+            stutter_field = (stutter_field + f";group={group}"
+                             if stutter_field else f"group={group}")
+
+        records = [make_unified_record(
+            file_id=pid,
+            start_s=None,
+            end_s=None,
+            speaker=pid,
+            text_intended=clean,
+            text_surface=syll,
+            stutter_type=stutter_field,
+            corpus="unwr",
+        )]
+        write_unified_csv(records, output_dir / f"{pid}.csv")
+        total_records += len(records)
+        total_files += 1
+
+    print(f"  UNWR: {total_files} files, {total_records} records "
+          f"-> {output_dir}")
 
 
 if __name__ == "__main__":

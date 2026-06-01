@@ -72,6 +72,25 @@ This document outlines the research plan for a high-impact journal article inves
   - [x] Cross-reference with Jason ortho transcripts: 56/66 sessions match SFS extractions; content aligns well (17-19/20 first words match; minor parsing diffs in Jason format). 10 Jason sessions not in SFS archive, 520 SFS ortho files not in Jason.
   - [x] Cross-reference with Jason usage matrices: 58/68 have matching SFS ortho, 62/68 have SFS type annotations. Matrices contain per-word stutter type labels (Fluent/Block/Prolongation/PWR/WWR/Unknown) + 81 linguistic feature columns — directly usable for co-dependency analysis.
 
+- [x] **UNWR (adult SSI cohort)** - Tang & Wong-lineage adult dataset
+  - Source: `data/additions/UNWR.zip` (1.3 GB). Extracted to `/Volumes/FATSPEECH/unwr/raw/` and processed to `/Volumes/FATSPEECH/unwr/processed/`.
+  - 58 speakers across 4 groups: Control (25), Stutter (12), Attention-ADHD (15), Attention+Stutter (6). Age range 18–60, adult cohort filling a gap between child-skewed SLASS/UCLASS and fluent-adult LibriSpeech.
+  - Per-speaker: 2× ~60s SSI question recordings (q1, q2) + syllable-segmented orthographic transcript + full phenotype (age, gender, languages, ASRS hyperactivity/inattention, PSal total, sonority/modulation/cue scores).
+  - Stutter labels are session-level SSI % stuttered syllables (range 0.0–6.0%) — not per-word annotations. Stratifies the corpus for ASR severity analysis but is coarser than SLASS/Jason.
+  - [x] Processing pipeline: `src/data/process_unwr.py` → `speakers.csv`, `inventory.csv`, `transcripts/<PID>.csv`, `scoring_{unwr,srt,pdt}.csv`
+  - [x] Standardisation: `python src/data/standardise.py --corpus unwr` → 56 unified-schema records under `/Volumes/FATSPEECH/standardised/unwr/`. `stutter_type` field carries `ssi_pct=...;group=...` for stratified analysis.
+  - [x] EDA: dataset summary table row + `unwr_groups.png` (speakers/group, SSI/group, age/group).
+  - Documentation: `docs/unwr.md`.
+  - Outstanding: UNWR does not yet contribute to per-word duration KDE — needs forced alignment to slot in.
+
+- [~] **UNWR Reliability (children's nonword reading)** - ON HOLD
+  - Source: `data/additions/Reliability_Analyses.zip` (2.8 MB, TextGrids + R/Python scripts; **no audio**).
+  - 1,735 transcribed items across schools (Hackney, Hatfield, Priory, Stanford, StHelen) and transcribers (Clarissa, Kaho, Roaa). Each TextGrid has ortho / target / response tiers.
+  - [x] Processing pipeline: `src/data/process_unwr_reliability.py` → `items.csv` at `/Volumes/FATSPEECH/unwr_reliability/processed/`
+  - [x] Inter-rater agreement: `src/data/unwr_reliability_agreement.py` → `agreement_pairwise.csv` + `agreement_summary.csv`. Gold-standard human ceiling ≈ 5% PER (Clarissa vs Kaho_original); naive retranscriber band ≈ 25% PER.
+  - [ ] **HELD pending audio.** The matching `.wav` files are presumably in `X:\Speech\UNWR-Transcription-Paper\` in the speech-lab Windows store. Liam to follow up with colleagues; once received, this data unlocks phoneme-level ASR evaluation against the gold-standard transcriptions.
+  - Documentation: `docs/unwr_reliability.md`.
+
 ### 1.2 Fluent Speech Control Dataset
 
 - [x] **LibriSpeech** - Fluent baseline
