@@ -71,6 +71,11 @@ This document outlines the research plan for a high-impact journal article inves
   - [x] Validate extracted WAV audio: curated vs full archive match confirmed; 9,789 resource forks cleaned; 8,971 valid WAVs + 818 tiny/empty; spot-check sample all valid
   - [x] Cross-reference with Jason ortho transcripts: 56/66 sessions match SFS extractions; content aligns well (17-19/20 first words match; minor parsing diffs in Jason format). 10 Jason sessions not in SFS archive, 520 SFS ortho files not in Jason.
   - [x] Cross-reference with Jason usage matrices: 58/68 have matching SFS ortho, 62/68 have SFS type annotations. Matrices contain per-word stutter type labels (Fluent/Block/Prolongation/PWR/WWR/Unknown) + 81 linguistic feature columns — directly usable for co-dependency analysis.
+  - [x] **Supplementary egress + organisation (2026-06-02)**: organised by `src/data/organise_slass_extended.py`. See `docs/slass_extended.md`.
+    - Additional AUDIO held SEPARATE from base → `/Volumes/FATSPEECH/slass_extended/audio/` (1,376 files, 8.6 GB). Base analyses run unchanged. `.au` stimuli (10,346 files, 10.9 GB) quarantined to `slass_extended/out_of_scope/`.
+    - Transcripts (709) + master rosters (529) + speaker metadata (466) → `/Volumes/FATSPEECH/slass/supplementary/`; MAY enrich base. Indexes built; 1,164/1,704 map to a base speaker.
+    - Audio id resolution: 468 known base speakers, 898 unresolved (75 are word-stimulus mp3s to drop), 10 new speakers.
+  - [ ] **Integrate extended SLASS (future)**: resolve 898 unresolved audio via parent-dir/roster; settle UCLASS-Recode provenance; convert held audio to 16 kHz mono WAV; roster-join the 8,839 opaque c###/d### sessions to demographics; parse SALT/bracketed transcripts to extend ASR-ready set.
 
 - [x] **UNWR (adult SSI cohort)** - Tang & Wong-lineage adult dataset
   - Source: `data/additions/UNWR.zip` (1.3 GB). Extracted to `/Volumes/FATSPEECH/unwr/raw/` and processed to `/Volumes/FATSPEECH/unwr/processed/`.
@@ -83,12 +88,12 @@ This document outlines the research plan for a high-impact journal article inves
   - Documentation: `docs/unwr.md`.
   - Outstanding: UNWR does not yet contribute to per-word duration KDE — needs forced alignment to slot in.
 
-- [~] **UNWR Reliability (children's nonword reading)** - ON HOLD
-  - Source: `data/additions/Reliability_Analyses.zip` (2.8 MB, TextGrids + R/Python scripts; **no audio**).
+- [x] **UNWR Reliability (children's nonword reading)** - AUDIO RECEIVED
   - 1,735 transcribed items across schools (Hackney, Hatfield, Priory, Stanford, StHelen) and transcribers (Clarissa, Kaho, Roaa). Each TextGrid has ortho / target / response tiers.
   - [x] Processing pipeline: `src/data/process_unwr_reliability.py` → `items.csv` at `/Volumes/FATSPEECH/unwr_reliability/processed/`
   - [x] Inter-rater agreement: `src/data/unwr_reliability_agreement.py` → `agreement_pairwise.csv` + `agreement_summary.csv`. Gold-standard human ceiling ≈ 5% PER (Clarissa vs Kaho_original); naive retranscriber band ≈ 25% PER.
-  - [ ] **HELD pending audio.** The matching `.wav` files are presumably in `X:\Speech\UNWR-Transcription-Paper\` in the speech-lab Windows store. Liam to follow up with colleagues; once received, this data unlocks phoneme-level ASR evaluation against the gold-standard transcriptions.
+  - [x] **Audio received (2026-06-02, from K. Tang)**: transcription-audio bundle (2,758 WAVs + co-located TextGrids + master demographics) extracted to `/Volumes/FATSPEECH/unwr_reliability/raw/transcription_audio/data/` (1.9 GB). Linked + verified: 2,369/2,370 per-item WAVs match TextGrid xmax within 50 ms. `src/data/link_unwr_reliability_audio.py` → `audio_items.csv`.
+  - [ ] **Phoneme-level ASR eval (now unblocked)**: evaluate Whisper/wav2vec2/HuBERT/phoneme APIs against Clarissa gold-standard reference; stratify by syllable length + prac/test; report PER vs the human inter-rater band.
   - Documentation: `docs/unwr_reliability.md`.
 
 ### 1.2 Fluent Speech Control Dataset

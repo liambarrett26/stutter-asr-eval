@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Parse the speech-lab archive Windows directory listing into a clean CSV inventory.
 
-Input: data/additions/sizes.txt (UTF-16 LE, produced by PowerShell
+Input: /Volumes/FATSPEECH/store_metadata/sizes.txt (UTF-16 LE, produced by PowerShell
        Get-ChildItem | Format-Table FullName, SizeMB on the lab's Research2 volume).
 
-Output: data/additions/archive_inventory.csv with columns
+Output: /Volumes/FATSPEECH/store_metadata/archive_inventory.csv with columns
        full_path, size_mb, top_level, parent_dir, basename, stem, ext
 
 The script auto-converts UTF-16 to UTF-8 in memory; it does not require the
@@ -14,8 +14,8 @@ either map them to a mounted path on a Mac or use them directly on Windows.
 
 Usage:
     python -m src.data.archive_inventory \\
-        --sizes data/additions/sizes.txt \\
-        --out data/additions/archive_inventory.csv
+        --sizes /Volumes/FATSPEECH/store_metadata/sizes.txt \\
+        --out /Volumes/FATSPEECH/store_metadata/archive_inventory.csv
 """
 
 from __future__ import annotations

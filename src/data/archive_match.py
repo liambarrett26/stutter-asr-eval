@@ -2,14 +2,14 @@
 """Match the speech-lab archive inventory against our extracted SLASS sessions.
 
 Reads:
-  - data/additions/archive_inventory.csv  (from archive_inventory.py)
+  - /Volumes/FATSPEECH/store_metadata/archive_inventory.csv  (from archive_inventory.py)
   - /Volumes/FATSPEECH/slass/full_archive/inventory.csv (default)
 
 Writes:
-  - data/additions/archive_match_manifest.csv
+  - /Volumes/FATSPEECH/store_metadata/archive_match_manifest.csv
         One row per (slass_session, archive_file) candidate. Used as input
         to archive_egress.py.
-  - data/additions/archive_match_summary.csv
+  - /Volumes/FATSPEECH/store_metadata/archive_match_summary.csv
         One row per slass_session with counts by category.
 
 Matching strategy
@@ -34,10 +34,10 @@ quantified by the ``match_basis`` column rather than filtered out.
 
 Usage:
     python src/data/archive_match.py \\
-        --archive data/additions/archive_inventory.csv \\
+        --archive /Volumes/FATSPEECH/store_metadata/archive_inventory.csv \\
         --slass /Volumes/FATSPEECH/slass/full_archive/inventory.csv \\
-        --out data/additions/archive_match_manifest.csv \\
-        --summary data/additions/archive_match_summary.csv
+        --out /Volumes/FATSPEECH/store_metadata/archive_match_manifest.csv \\
+        --summary /Volumes/FATSPEECH/store_metadata/archive_match_summary.csv
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Copy archive files from the speech-lab Windows store using a match manifest.
 
-Reads data/additions/archive_match_manifest.csv (from archive_match.py) and
+Reads /Volumes/FATSPEECH/store_metadata/archive_match_manifest.csv (from archive_match.py) and
 copies each unique source file from the lab Windows store to a destination
 tree on local disk. The archive's directory structure under X:\\Speech\\ is
 mirrored under --dest so provenance is preserved.

@@ -1,5 +1,9 @@
-# Data
+# Data — actual data lives on the mounted drive (/Volumes/FATSPEECH).
+# The repo's data/ holds documentation only, so track .md docs but
+# ignore everything else (audio, csv, txt dumps, zips, etc.).
 /data/**
+!/data/**/
+!/data/**/*.md
 
 
 # Byte-compiled / optimized / DLL files
