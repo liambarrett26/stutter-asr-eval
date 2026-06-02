@@ -196,8 +196,11 @@ def strip_uclass_textgrid_stutter(label: str) -> str:
     """Convert a UCLASS stutter-coded TextGrid label to clean surface text.
 
     Same convention as SFS stutter layer (JSRU phonetic + disfluency coding).
+    The surface token is recovered the same way as an orthographic SFS
+    label (strip the :/x/Q prefixes); the disfluency *type* is obtained
+    separately via classify_sfs_stutter.
     """
-    return strip_sfs_stutter(label)
+    return strip_sfs_orthographic(label)
 
 
 def strip_uclass_textgrid_orth(label: str) -> str:
@@ -415,8 +418,42 @@ def standardise_uclass_session(
     Priority:
     1. Time-aligned orthographic TextGrid (intended) + stutter-coded TextGrid (surface)
     2. Flat orthographic transcript (intended only, no timestamps)
+    3. Stutter-coded tier ONLY (no orthographic partner): produces
+       type-labelled, time-aligned records with a phonetic surface form.
+       Used for the adult UCLASS sessions whose only annotation is the
+       SFS stutter tier — no English reference, but valuable per-word
+       stutter-type + timing for the disfluency/mechanistic analyses.
     """
     unified = []
+
+    # Path 3: stutter tier only (no orthographic).
+    if (not (orth_csv and orth_csv.exists())
+            and not (flat_ortho and flat_ortho.exists())
+            and stutter_csv and stutter_csv.exists()):
+        with open(stutter_csv) as f:
+            for rec in csv.DictReader(f):
+                label = rec.get("label", "")
+                surface = strip_uclass_textgrid_stutter(label)
+                if not surface:
+                    continue
+                stype = classify_sfs_stutter(label)
+                if stype in ("", "fluent"):
+                    stype = "fluent"
+                try:
+                    t = float(rec["time"]); d = float(rec["duration"])
+                except (KeyError, ValueError):
+                    t = d = None
+                unified.append(make_unified_record(
+                    file_id=file_id,
+                    start_s=t,
+                    end_s=(t + d) if (t is not None and d is not None) else None,
+                    speaker="",
+                    text_intended="",          # no English reference
+                    text_surface=surface,      # JSRU phonetic surface
+                    stutter_type=stype,
+                    corpus="uclass_stutter_only",
+                ))
+        return unified
 
     if orth_csv and orth_csv.exists():
         with open(orth_csv) as f:
@@ -435,6 +472,7 @@ def standardise_uclass_session(
             time_s = float(rec["time"])
             dur_s = float(rec["duration"])
             surface = intended
+            stype = ""
 
             if stutter_records:
                 # Find nearest stutter record
@@ -446,9 +484,15 @@ def standardise_uclass_session(
                         best = sr
                         best_dist = dist
                 if best:
-                    surface = strip_uclass_textgrid_stutter(best["label"])
-                    if not surface:
-                        surface = intended
+                    surf = strip_uclass_textgrid_stutter(best["label"])
+                    if surf:
+                        surface = surf
+                    # The UCLASS stutter tier uses the same SFS JSRU
+                    # disfluency coding as SLASS, so classify the type
+                    # from the raw label (Q = block, {xN} = pwr, etc.).
+                    cls = classify_sfs_stutter(best["label"])
+                    if cls and cls not in ("fluent", ""):
+                        stype = cls
 
             unified.append(make_unified_record(
                 file_id=file_id,
@@ -457,7 +501,7 @@ def standardise_uclass_session(
                 speaker="",
                 text_intended=intended,
                 text_surface=surface,
-                stutter_type="",
+                stutter_type=stype,
                 corpus="uclass",
             ))
 
@@ -562,7 +606,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Standardise transcripts across corpora")
-    parser.add_argument("--corpus", choices=["slass", "uclass", "fluencybank", "librispeech", "unwr", "all"], default="all")
+    parser.add_argument("--corpus", choices=["slass", "slass_full", "uclass", "fluencybank", "librispeech", "unwr", "all"], default="all")
     parser.add_argument("--output", type=Path, default=Path("/Volumes/FATSPEECH/standardised"))
     args = parser.parse_args()
 
@@ -587,6 +631,13 @@ def main():
     if args.corpus in ("unwr", "all"):
         print("Standardising UNWR...")
         _standardise_all_unwr(args.output / "unwr")
+
+    # slass_full is opt-in only (not part of "all") because it overlaps the
+    # curated slass set at the recording level and is kept as a separate,
+    # comprehensive WER base rather than merged into the Pete-analysis base.
+    if args.corpus == "slass_full":
+        print("Standardising SLASS full archive (ortho sessions)...")
+        _standardise_all_slass_full(args.output / "slass_full")
 
 
 def _standardise_all_slass(output_dir: Path):
@@ -628,6 +679,103 @@ def _standardise_all_slass(output_dir: Path):
     print(f"  SLASS: {total_files} files, {total_records} records -> {output_dir}")
 
 
+def _standardise_all_slass_full(output_dir: Path):
+    """Standardise every SLASS full-archive session that has an orthographic
+    layer (the WER-ready ceiling, ~576 sessions), pulling stutter/type
+    labels where those layers exist.
+
+    Kept SEPARATE from the curated `slass` output: the two overlap at the
+    recording level under different naming schemes (curated `f_0050_7_11y6m`
+    vs archive `0050c116`), so they must be de-duplicated by speaker before
+    being pooled. A per-session manifest with a parsed speaker_id and a
+    transcript-cleanliness score is written so that quality filtering and
+    dedup can happen downstream.
+    """
+    ann = Path("/Volumes/FATSPEECH/slass/full_archive/annotations")
+    if not ann.exists():
+        print(f"  SLASS full: annotations dir missing ({ann})")
+        return
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest_rows = []
+    total_records = 0
+    total_files = 0
+    total_labelled = 0
+
+    import re as _re
+    id_re = _re.compile(r"(\d{3,4})")
+
+    for ortho_csv in sorted(ann.glob("*_orthographic.csv")):
+        stem = ortho_csv.name[: -len("_orthographic.csv")]
+        stutter_csv = ann / f"{stem}_stutter.csv"
+        type_csv = None
+        for suffix in ("_type.csv", "_types.csv"):
+            cand = ann / f"{stem}{suffix}"
+            if cand.exists():
+                type_csv = cand
+                break
+
+        try:
+            records = standardise_slass_session(
+                ortho_csv=ortho_csv,
+                stutter_csv=stutter_csv if stutter_csv.exists() else None,
+                type_csv=type_csv,
+                file_id=stem,
+            )
+        except Exception as e:
+            manifest_rows.append({
+                "session": stem, "n_words": 0, "n_labelled": 0,
+                "speaker_id": "", "clean_token_rate": "",
+                "has_stutter_layer": stutter_csv.exists(),
+                "has_type_layer": type_csv is not None,
+                "error": str(e)[:80],
+            })
+            continue
+
+        if not records:
+            continue
+
+        # Transcript-cleanliness: fraction of intended tokens that are
+        # plain alphabetic words (the messier conversational/turn-marked
+        # sessions score low and can be filtered downstream).
+        toks = [r["text_intended"] for r in records if r["text_intended"]]
+        clean = sum(1 for t in toks if t.replace("'", "").isalpha())
+        clean_rate = clean / len(toks) if toks else 0.0
+        n_lab = sum(1 for r in records
+                    if r["stutter_type"]
+                    and r["stutter_type"] not in ("fluent", "unknown"))
+        m = id_re.search(stem)
+        sid = m.group(1).zfill(4) if m else ""
+
+        write_unified_csv(records, output_dir / f"{stem}.csv")
+        total_records += len(records)
+        total_files += 1
+        total_labelled += n_lab
+        manifest_rows.append({
+            "session": stem, "n_words": len(records), "n_labelled": n_lab,
+            "speaker_id": sid, "clean_token_rate": f"{clean_rate:.2f}",
+            "has_stutter_layer": stutter_csv.exists(),
+            "has_type_layer": type_csv is not None,
+            "error": "",
+        })
+
+    # Write the session manifest alongside the standardised CSVs.
+    man = output_dir / "_session_manifest.csv"
+    with man.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=[
+            "session", "n_words", "n_labelled", "speaker_id",
+            "clean_token_rate", "has_stutter_layer", "has_type_layer",
+            "error"])
+        w.writeheader()
+        w.writerows(manifest_rows)
+
+    speakers = {r["speaker_id"] for r in manifest_rows if r["speaker_id"]}
+    print(f"  SLASS full: {total_files} sessions, {total_records:,} words, "
+          f"{total_labelled:,} labelled, ~{len(speakers)} speakers "
+          f"-> {output_dir}")
+    print(f"  session manifest -> {man}")
+
+
 def _standardise_all_uclass(output_dir: Path):
     """Standardise all UCLASS transcript files."""
     aligned_dir = Path("/Volumes/FATSPEECH/uclass/processed/transcripts/aligned")
@@ -662,8 +810,25 @@ def _standardise_all_uclass(output_dir: Path):
             write_unified_csv(records, output_dir / f"{stem}.csv")
             total_records += len(records)
             total_files += 1
+            processed.add(stem)
 
-    print(f"  UCLASS: {total_files} files, {total_records} records -> {output_dir}")
+    # Stutter-coded tiers with no orthographic partner (adult UCLASS
+    # sessions): type-labelled + timed, phonetic surface only.
+    n_stutter_only = 0
+    for f in sorted(aligned_dir.glob("*_word.csv")):
+        stem = f.stem.replace("_word", "")
+        if stem in processed:
+            continue
+        records = standardise_uclass_session(stutter_csv=f, file_id=stem)
+        if records:
+            write_unified_csv(records, output_dir / f"{stem}.csv")
+            total_records += len(records)
+            total_files += 1
+            processed.add(stem)
+            n_stutter_only += 1
+
+    print(f"  UCLASS: {total_files} files, {total_records} records "
+          f"({n_stutter_only} stutter-tier-only) -> {output_dir}")
 
 
 def _standardise_all_fluencybank(output_dir: Path):

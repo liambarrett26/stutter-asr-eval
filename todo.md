@@ -96,6 +96,13 @@ This document outlines the research plan for a high-impact journal article inves
   - [ ] **Phoneme-level ASR eval (now unblocked)**: evaluate Whisper/wav2vec2/HuBERT/phoneme APIs against Clarissa gold-standard reference; stratify by syllable length + prac/test; report PER vs the human inter-rater band.
   - Documentation: `docs/unwr_reliability.md`.
 
+- [x] **SLASS ortho expansion + label mining (2026-06-02)** — enlarge the WER base for H1 and recover more stutter-type labels for H2.
+  - `python src/data/standardise.py --corpus slass_full` → `/Volumes/FATSPEECH/standardised/slass_full/`: 576 full-archive ortho sessions, 218,562 words, ~140 speakers. High-quality subset (clean_token_rate ≥ 0.9): **422 sessions / 146,665 words** (~5× the 28k curated base). Kept SEPARATE from curated `slass` (overlap at recording level under different naming; dedup by speaker before pooling). Per-session quality manifest at `slass_full/_session_manifest.csv`.
+  - UCLASS label recovery: fixed hardcoded `stutter_type=""` + the `strip_sfs_stutter` NameError; added stutter-tier-only path for 8 ADULT sessions → **438 type-labelled words** (block-dominant; was 0). Tagged `uclass_stutter_only`, phonetic surface only (excluded from WER, usable for H2/xAI).
+  - Stutter-type label inventory: Jason gold **2,050** (engine) + SLASS curated 593 + SLASS full 886 + UCLASS adult 438.
+  - Supplementary metadata: "Stutter sq brackets" are the same SFS format already processed (no new per-word labels); rosters provide demographics/severity enrichment only.
+  - [ ] Future: roster-join to dedup slass_full vs curated by speaker + assign c###/d### demographics; derive SR-based severity across corpora for H3.
+
 ### 1.2 Fluent Speech Control Dataset
 
 - [x] **LibriSpeech** - Fluent baseline
@@ -138,12 +145,20 @@ This document outlines the research plan for a high-impact journal article inves
 - [ ] Create corpus-stratified subsets for cross-dataset analysis
 
 #### Evaluation infrastructure
-- [ ] Implement JSONL manifest format for raw ASR outputs: `{file_id, audio_path, model_name, raw_hypothesis, word_timestamps, confidence, processing_time_s}`
-- [ ] Save raw outputs BEFORE normalisation so re-evaluation with different normalisers doesn't require re-running inference
-- [ ] Implement metric computation: WER, CER (jiwer), BERTScore (deberta-xlarge-mnli), hallucination rate (I/N), per-stutter-type error rates
-- [ ] Implement word-level alignment (`jiwer.process_words()`) for stutter-type conditioned error analysis
-- [ ] Implement statistical testing: paired bootstrap resampling for WER confidence intervals, Wilcoxon signed-rank test for system comparison, MAPSSWE (NIST SCTK)
-- [ ] Implement both corpus-level (micro) and utterance-level (macro) WER aggregation — report both
+- [x] **Harness built (2026-06-02)** — `src/evaluation/{build_manifest,run_asr,score}.py`. See `docs/evaluation_harness.md`.
+  - [x] JSONL manifest (`build_manifest.py`) → `/Volumes/FATSPEECH/manifests/benchmark_v1.jsonl`: 420 stuttered SLASS sessions (122 spk, 29.8h) + 11,126 fluent LibriSpeech utts (146 spk, 21.3h). Per-corpus resolvers; both intended+surface references; needs_chunking flag; corrupt (<1s) dropped.
+  - [x] `run_asr.py` saves raw hypotheses BEFORE normalisation; resume-safe; chunks long audio for CTC models; models resample to 16kHz on load. (GPU-box-ready; not run locally.)
+  - [x] Metrics (`score.py`): WER, CER via self-contained Levenshtein (no jiwer dep), micro + macro aggregation, scored vs BOTH references, paired bootstrap 95% CI on the stuttered−fluent gap, speaker-level aggregation. Whisper EnglishTextNormalizer w/ fallback. Self-test passes.
+  - [ ] Still to add: BERTScore (deberta-xlarge-mnli), hallucination rate (I/N), per-stutter-type word-level alignment for H2, Wilcoxon/MAPSSWE.
+- [x] **FluencyBank + UCLASS wired into H1 manifest (2026-06-02)** — H1 base DOUBLED: stuttered 602 units / 230 spk / 61.4h (was 420/122/29.8h); fluent 11,174 / 155 spk / 33.1h. Datasets: slass_full 420 + librispeech 11,126 + fluencybank 195 + uclass 36. FB condition-tagged (AWS/CWS=stuttered, UMD-CMU Control=fluent, AWC=cluttered); collision-guarded resolver. Only 4 FB sub-corpora have audio.
+- [x] **FluencyBank CHAT disfluency extracted** — `src/data/fb_disfluency.py`: surface vs intended + event types (995 rep / 194 retrace / 2254 filled-pause / 34 fragment) over 119 sessions → `fluencybank/processed/{disfluency_index.csv,disfluency_text/}`. FB severity folded into severity_index (100 mild/12 mod/7 severe).
+- [ ] Wire FB reconstructed surface/intended (from disfluency_text) into the manifest reference fields (currently FB surface==intended).
+- [ ] **Run the headline benchmark on the 2×5090 box**: whisper-large-v3 + wav2vec2-large → score → first H1 result (expected ~5–21% vs ~30–55% WER gap).
+
+#### H2/H3 data round-out (2026-06-02, done)
+- [x] **H2 word-event manifest** — `src/evaluation/build_h2_manifest.py` → `manifests/h2_word_events.jsonl`. 64/68 Jason sessions w/ audio; 11,663 word events, 1,838 typed stuttered (per-word timing+type+linguistic covariates). Engine for type-conditioned analysis + xAI probing.
+- [x] **Per-session severity** — `src/data/derive_severity.py` → `standardised/severity_index.csv` (stuttering rate, mild/mod/severe). H3 viable: Jason gold = 46 severe / 15 moderate / 7 mild. (slass_full auto-labels under-detect → skew mild; use Jason gold SR. FluencyBank SR pending a CHAT-disfluency parse.)
+- [x] **speakers.csv repair** — `src/data/fix_slass_speakers.py`: gender M=40/F=11/U=11 (garbage fixed), ages 51→56/62, name tokens preserved, 9 fragment-dup rows flagged for review (orig→.bak).
 
 ---
 
