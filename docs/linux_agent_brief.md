@@ -25,13 +25,17 @@ stutter labels matter, not just corpus WER.
 
 ## Where everything lives
 
-Code is in the repo (`src/`, `results/eda/`); **all data is on the
-mounted drive** (Mac path `/Volumes/FATSPEECH`, will differ here — find
-the mount and use `--audio-root-map`). The repo `data/` holds docs only.
+Code is in the repo (`src/`, `results/eda/`); **all data lives in the
+governed UCL RDSS store** (migrated June 2026). Manifests store the Mac mount
+path `/Volumes/ritd-ag-project-rd02dw-lbarr63`; on this box the same tree
+mounts elsewhere — find the mount and either set `ASR_DATA_ROOT=<mount>` (the
+builders derive every path from it) or pass `run_asr.py --audio-root-map`. The
+repo `data/` holds docs only. Each store has a `README.md`; the store root has
+a `CHANGELOG.md` (RDSS has no version control — record data changes there).
 
-Key data drive locations (paths shown with the Mac prefix):
+Key data locations (paths shown with the Mac RDSS prefix):
 ```
-/Volumes/FATSPEECH/
+/Volumes/ritd-ag-project-rd02dw-lbarr63/
 ├── manifests/
 │   ├── benchmark_v1.jsonl        H1 manifest, one unit per audio file
 │   └── h2_word_events.jsonl      H2 manifest, one row per word event
@@ -79,8 +83,12 @@ commercial API stubs (`src/models/api/`, need keys). All resample to
 
 ## Gotchas / conventions
 
-- **Path remap is mandatory** on Linux (`--audio-root-map OLD=NEW`) — the
-  manifest stores Mac paths. Or symlink the mount to `/Volumes/FATSPEECH`.
+- **Path handling on Linux:** the manifest stores the Mac RDSS path
+  (`/Volumes/ritd-ag-project-rd02dw-lbarr63/...`). Either set
+  `ASR_DATA_ROOT=<local mount>` and regenerate, or pass `run_asr.py
+  --audio-root-map /Volumes/ritd-ag-project-rd02dw-lbarr63=<local mount>`, or
+  symlink the mount to that path. (`*.fatspeech.jsonl.bak` keeps the old
+  FATSPEECH-path manifests if a FATSPEECH-rooted copy is still in use.)
 - **Data never goes in the repo** (`data/**` is gitignored except `.md`
   docs). Write model outputs to the drive's `results/`.
 - **Two SLASS sets**: `slass_full` (comprehensive, in the manifest) vs

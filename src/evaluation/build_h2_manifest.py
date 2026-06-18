@@ -34,12 +34,19 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 from collections import Counter
 from pathlib import Path
 
-JASON = Path("/Volumes/SPEECH/from_jason/Speech data Jason/output")
-PROC_AUDIO = Path("/Volumes/FATSPEECH/slass/processed/audio")
-FULL_AUDIO = Path("/Volumes/FATSPEECH/slass/full_archive/audio")
+# Audio root: the governed RDSS share since June 2026 (override per machine
+# with ASR_DATA_ROOT). JASON is the source label matrices and lives on a
+# separate lab drive, not under the data root — override with JASON_ROOT.
+DATA_ROOT = Path(os.environ.get(
+    "ASR_DATA_ROOT", "/Volumes/ritd-ag-project-rd02dw-lbarr63"))
+JASON = Path(os.environ.get(
+    "JASON_ROOT", "/Volumes/SPEECH/from_jason/Speech data Jason/output"))
+PROC_AUDIO = DATA_ROOT / "slass" / "processed" / "audio"
+FULL_AUDIO = DATA_ROOT / "slass" / "full_archive" / "audio"
 
 PURE = ("Block", "Prolongation", "PWR", "WWR")
 

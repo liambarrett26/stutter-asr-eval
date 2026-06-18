@@ -15,26 +15,36 @@ pip install -e ".[whisper,faster-whisper]"
 nvidia-smi          # confirm both 5090s visible
 ```
 
-The FATSPEECH data drive must be mounted. Note its mount path — it will
-NOT be `/Volumes/FATSPEECH` (that's the Mac path baked into the
-manifest). Say it mounts at `/mnt/fatspeech`.
+The project data must be mounted. As of June 2026 the governed home is the
+**UCL RDSS** share, and the manifests store RDSS paths
+(`/Volumes/ritd-ag-project-rd02dw-lbarr63/...` — the Mac mount point). On the
+GPU box the same tree mounts elsewhere; note that path. Say it mounts at
+`/mnt/data` (whether that's the RDSS share over CIFS or a local working copy).
 
 ## 1. The path-remap gotcha (important)
 
-The manifests store absolute Mac paths (`/Volumes/FATSPEECH/...`).
-`run_asr.py` rewrites them at load time with `--audio-root-map OLD=NEW`;
-no need to regenerate the manifest.
+The manifests store absolute Mac paths for the RDSS root
+(`/Volumes/ritd-ag-project-rd02dw-lbarr63/...`). Two ways to point the harness
+at the local mount — pick one:
 
 ```bash
-MAP="/Volumes/FATSPEECH=/mnt/fatspeech"      # adjust RHS to the real mount
-MANI=/mnt/fatspeech/manifests/benchmark_v1.jsonl
-OUT=/mnt/fatspeech/results
+# (a) remap at run time — no manifest edit
+MAP="/Volumes/ritd-ag-project-rd02dw-lbarr63=/mnt/data"   # adjust RHS to the real mount
+MANI=/mnt/data/manifests/benchmark_v1.jsonl
+OUT=/mnt/data/results
 ```
 
-If you prefer, regenerate the manifest natively on Linux instead
-(`build_manifest.py` hardcodes `/Volumes/FATSPEECH` — edit the path
-constants at the top, or symlink `/Volumes/FATSPEECH -> /mnt/fatspeech`,
-which makes the remap unnecessary everywhere).
+```bash
+# (b) regenerate the manifest natively — builders read ASR_DATA_ROOT
+ASR_DATA_ROOT=/mnt/data python -m src.evaluation.build_manifest \
+  --out /mnt/data/manifests/benchmark_v1.jsonl
+# (h2: also export JASON_ROOT to wherever the Jason matrices are mounted)
+```
+
+With (b) the manifest paths are native to the local mount, so no
+`--audio-root-map` is needed at run time. If the GPU box still uses an old
+FATSPEECH-rooted copy, the original Mac-path manifests are preserved alongside
+as `*.fatspeech.jsonl.bak` (remap from `/Volumes/FATSPEECH` instead).
 
 ## 2. Smoke test (always do this first)
 

@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -42,9 +43,14 @@ try:
 except ImportError:
     sf = None
 
-STD = Path("/Volumes/FATSPEECH/standardised")
-SLASS_FULL_AUDIO = Path("/Volumes/FATSPEECH/slass/full_archive/audio")
-LIBRI_ROOT = Path("/Volumes/FATSPEECH/librispeech/LibriSpeech")
+# Canonical data root. Since June 2026 the governed home is the UCL RDSS share;
+# override per machine with ASR_DATA_ROOT (e.g. on the Linux GPU box set it to
+# wherever the RDSS/working copy is mounted). All corpus paths derive from this.
+DATA_ROOT = Path(os.environ.get(
+    "ASR_DATA_ROOT", "/Volumes/ritd-ag-project-rd02dw-lbarr63"))
+STD = DATA_ROOT / "standardised"
+SLASS_FULL_AUDIO = DATA_ROOT / "slass" / "full_archive" / "audio"
+LIBRI_ROOT = DATA_ROOT / "librispeech" / "LibriSpeech"
 
 DISFLUENT = lambda s: bool(s) and s.strip().lower() not in ("", "fluent", "unknown")
 
@@ -166,7 +172,7 @@ def resolve_librispeech() -> list[dict]:
 # ── FluencyBank (stuttered adults+children; some controls/clutterers) ─────────
 
 FB_STD = STD / "fluencybank"
-FB_AUDIO = Path("/Volumes/FATSPEECH/fluencybank/processed/audio")
+FB_AUDIO = DATA_ROOT / "fluencybank" / "processed" / "audio"
 
 
 def _fb_condition(corpus: str, stem: str) -> str:
@@ -242,7 +248,7 @@ def resolve_fluencybank() -> list[dict]:
 # ── UCLASS (stuttered; child + adult) ────────────────────────────────────────
 
 UCLASS_STD = STD / "uclass"
-UCLASS_ROOT = Path("/Volumes/FATSPEECH/uclass")
+UCLASS_ROOT = DATA_ROOT / "uclass"
 _SPK_DIGITS = __import__("re").compile(r"(\d{3,4})")
 
 
