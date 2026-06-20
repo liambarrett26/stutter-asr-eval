@@ -196,11 +196,22 @@ def _fb_speaker(corpus: str, stem: str) -> str:
 def resolve_fluencybank() -> list[dict]:
     if not FB_STD.exists():
         return []
-    # Index audio by stem; resolve each transcript by longest trailing match.
-    audio_by_stem: dict[str, Path] = {}
+    # Index audio by (subcorpus, path-within-subcorpus), so matching is scoped
+    # to the correct subcorpus. The audio tree is <subcorpus>/<task>/<file>.wav;
+    # keying on the bare stem alone lets numeric filenames collide across
+    # subcorpora (e.g. a Hakim transcript grabbing Voices-AWS/interview/05.wav)
+    # and across tasks (interview/104 vs reading/104). Subcorpora with no
+    # extracted audio (Hakim, Examples, VanZaalen, Brejon) get no entries here,
+    # so their transcripts resolve to nothing and are skipped — as they should.
+    audio_by_key: dict[tuple[str, str], Path] = {}
     for w in FB_AUDIO.rglob("*.wav"):
-        if not w.name.startswith("."):
-            audio_by_stem.setdefault(w.stem, w)
+        if w.name.startswith("."):
+            continue
+        rel = w.relative_to(FB_AUDIO).with_suffix("")
+        if len(rel.parts) < 2:
+            continue
+        sub, within = rel.parts[0], "_".join(rel.parts[1:])
+        audio_by_key.setdefault((sub, within), w)
 
     claimed: set[str] = set()
     units = []
@@ -213,9 +224,9 @@ def resolve_fluencybank() -> list[dict]:
         toks = rest.split("_")
         audio = None
         for i in range(len(toks)):
-            key = "_".join(toks[i:])
-            if key in audio_by_stem and str(audio_by_stem[key]) not in claimed:
-                audio = audio_by_stem[key]
+            key = (corpus, "_".join(toks[i:]))   # subcorpus-scoped, no cross-corpus leak
+            if key in audio_by_key and str(audio_by_key[key]) not in claimed:
+                audio = audio_by_key[key]
                 break
         if audio is None:
             continue

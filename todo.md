@@ -533,3 +533,70 @@ Key papers informing this roadmap:
 4. Mitra et al. (2021) - VA system analysis with severity stratification
 5. Gong et al. (2024) - AS-70 Mandarin dataset methodology
 6. Sridhar & Wu (2025) - Whisper hallucination analysis on stuttered speech
+
+---
+
+## Design decisions / open methodological risks (added 2026-06-20)
+
+Design-level gaps surfaced when planning the analyses against the manuscript and
+the *Computational Linguistics* target. These are **not extra tasks so much as
+decisions that gate the validity of the headline claims** — settle each before
+freezing the corresponding result. Full rationale in `docs/analysis_plan.md`.
+
+- [ ] **Matched-control identification strategy (highest priority).** The
+  stuttered-vs-LibriSpeech contrast is confounded by dialect × age × register
+  (British child spontaneous vs American adult read). Make the **within-corpus
+  FluencyBank UMD-CMU stuttered-vs-matched-control** comparison the *primary*
+  causal contrast; demote LibriSpeech to an external anchor. Carry dialect / age
+  band / register / corpus as covariates rather than averaging over them.
+- [ ] **Statistical model for clustered/longitudinal data.** Replace
+  per-utterance Wilcoxon as the primary inference with **mixed-effects models**
+  (random intercepts for speaker + corpus; fixed effects for condition,
+  severity, architecture, confounds). Add **MAPSSWE** (NIST matched-pairs) as
+  the standard paired-WER significance test. Report effect sizes beside p-values.
+- [ ] **H4 (phoneme PER vs human ceiling) — elevate or descope.** The UNWR
+  reliability set (gold ≈5 % PER, naive ≈25 %) calibrates ASR against a *human*
+  inter-rater ceiling — a distinctive contribution currently absent from the
+  manuscript and only a single checkbox here. Recommend **elevate to a Paper-1
+  contribution**; add a Methods/Results section + a dedicated PER harness.
+- [ ] **Commercial-API governance (DPIA).** Sending identifiable biometric
+  speech outside the EU is barred by the DPIA, and audio cannot be meaningfully
+  de-identified. **Restrict commercial-API evaluation to the public corpora
+  (FluencyBank/UCLASS); exclude SLASS.** Update Phase 2.2 accordingly.
+- [ ] **Manuscript ↔ implementation drift.** The draft Methods describe steps the
+  harness does not yet perform. Resolve each:
+  - [ ] **VAD segmentation** (Silero) — implement, or remove the claim and
+    document fixed-window chunking instead.
+  - [ ] **BERTScore** (DeBERTa-xlarge-mnli) — add to `score.py`.
+  - [ ] **Hallucination rate** (I/N), per stutter type — add to `score.py`.
+  - [ ] **Word-level reference↔hypothesis alignment** for the co-dependency
+    contingency tables (H2).
+  (Inference is decoupled from scoring — raw hypotheses are saved pre-
+  normalisation — so these can be added post hoc without re-running models.)
+- [ ] **Paper scope boundary.** Frame **Paper 1 (CL)** = benchmark + co-dependency
+  + reference-convention methodology + human-ceiling calibration + mechanistic
+  probing. Defer fine-tuning / augmentation / architectural redesign (Phase 6) to
+  **Paper 2**.
+- [ ] **Training-data contamination check.** LibriSpeech is in training data
+  (noted). Check/flag whether the *public stuttered* corpora (FluencyBank,
+  UCLASS) are also in web-scale training (e.g. Whisper), since it inflates their
+  absolute WER.
+
+- [ ] **FluencyBank interview reference scope (scoring-time decision).** The
+  Voices-AWS/CWS *interview* references include the interviewer's turns / start
+  at a different turn than the audio, which inflates WER via interviewer
+  insertions (uniform across models, so model *ranking* is preserved but FB
+  *absolute* numbers are not clean). Resolve at scoring time — raw hypotheses
+  are saved — by one of: participant-only scoring, include-interviewer, or
+  exclude interviews. The *reading* subcorpora (known passage) and UMD-CMU (the
+  matched control) are unaffected. NB: the resolver *mis-mapping* was a separate
+  bug, fixed 2026-06-20 — the manifest now task-scopes audio by subcorpus and
+  recovered ~57 Voices units previously lost to bare-filename collisions
+  (stuttered 602→654; FB Voices-AWS 56→94, Voices-CWS 22→39).
+
+### Execution note
+
+Because scoring is decoupled from inference, the **full open-source benchmark
+run can proceed now in parallel** with settling the above — raw outputs are
+reusable under any final design. **Hold the commercial-API runs** pending the
+governance decision.

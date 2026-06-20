@@ -114,6 +114,82 @@ def macro_wer(units: list[dict], key: str) -> float:
     return sum(rates) / len(rates) if rates else 0.0
 
 
+def hallucination_micro(units: list[dict], key: str) -> float:
+    """Insertion rate I/N (fabricated words per reference word), aggregated."""
+    ins = sum(u[key][2] for u in units)
+    refn = sum(u[key][0] + u[key][1] + u[key][3] for u in units)  # S+D+H = |ref|
+    return ins / refn if refn else 0.0
+
+
+def hallucination_macro(units: list[dict], key: str) -> float:
+    rates = []
+    for u in units:
+        s, dlt, ins, hit = u[key]
+        denom = s + dlt + hit
+        if denom:
+            rates.append(ins / denom)
+    return sum(rates) / len(rates) if rates else 0.0
+
+
+def align_ref_ops(ref: list, hyp: list) -> tuple[list[str], int]:
+    """Per-reference-token op sequence + insertion count.
+
+    Same DP/backtrace as ``_levenshtein`` but records, for each reference
+    token (in reference order), whether it was Correct, Substituted or Deleted
+    ('C'/'S'/'D'). Insertions (hypothesis tokens with no reference) are counted
+    but have no reference position. Used by the co-dependency analysis to tie
+    each stutter-typed reference word to what the ASR did to it.
+    """
+    n, m = len(ref), len(hyp)
+    d = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n + 1):
+        d[i][0] = i
+    for j in range(m + 1):
+        d[0][j] = j
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            cost = 0 if ref[i - 1] == hyp[j - 1] else 1
+            d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1,
+                          d[i - 1][j - 1] + cost)
+    i, j = n, m
+    ops: list[str] = [""] * n
+    ins = 0
+    while i > 0 or j > 0:
+        if i > 0 and j > 0 and ref[i - 1] == hyp[j - 1] and \
+                d[i][j] == d[i - 1][j - 1]:
+            ops[i - 1] = "C"; i -= 1; j -= 1
+        elif i > 0 and j > 0 and d[i][j] == d[i - 1][j - 1] + 1:
+            ops[i - 1] = "S"; i -= 1; j -= 1
+        elif i > 0 and d[i][j] == d[i - 1][j] + 1:
+            ops[i - 1] = "D"; i -= 1
+        else:
+            ins += 1; j -= 1
+    return ops, ins
+
+
+# ── BERTScore (optional; heavy — needs the bert-score pkg + a transformer) ────
+
+_BERT_SCORER = None
+
+
+def get_bertscorer(model_type: str, device: str):
+    """Cached BERTScorer so the model loads once across reference conventions."""
+    global _BERT_SCORER
+    if _BERT_SCORER is None:
+        from bert_score import BERTScorer
+        _BERT_SCORER = BERTScorer(model_type=model_type, lang="en",
+                                  device=device, rescale_with_baseline=False)
+    return _BERT_SCORER
+
+
+def bertscore_f1(refs: list[str], hyps: list[str],
+                 model_type: str, device: str) -> list[float]:
+    """BERTScore F1 per (hyp, ref) pair on raw text (semantic similarity)."""
+    scorer = get_bertscorer(model_type, device)
+    _, _, f = scorer.score(hyps, refs)        # (cands, refs)
+    return [float(x) for x in f]
+
+
 def bootstrap_gap(stut: list[float], flu: list[float], n_boot=2000):
     """95% CI on (mean stuttered WER - mean fluent WER) via unit bootstrap.
 
@@ -139,7 +215,7 @@ def bootstrap_gap(stut: list[float], flu: list[float], n_boot=2000):
 
 
 def score(manifest: Path, hyp_path: Path, ref_field: str,
-          normaliser) -> dict:
+          normaliser, bert: dict | None = None) -> dict:
     mani = {json.loads(l)["unit_id"]: json.loads(l)
             for l in manifest.open(encoding="utf-8")}
     scored = []
@@ -148,22 +224,38 @@ def score(manifest: Path, hyp_path: Path, ref_field: str,
         u = mani.get(h["unit_id"])
         if not u:
             continue
+        raw_hyp = h.get("hypothesis", "") or ""
         ref = normaliser(u[ref_field])
-        hyp = normaliser(h.get("hypothesis", "") or "")
+        hyp = normaliser(raw_hyp)
         rec = dict(u)
+        rec["_raw_hyp"] = raw_hyp
         rec["wer_c"] = wer_counts(ref, hyp)
         rec["cer_c"] = cer_counts(ref, hyp)
         rec["_unit_wer"] = ((rec["wer_c"][0] + rec["wer_c"][1] + rec["wer_c"][2])
                             / max(1, rec["wer_c"][0] + rec["wer_c"][1] + rec["wer_c"][3]))
         scored.append(rec)
 
+    # BERTScore on RAW text (semantic, so we don't strip meaning by normalising)
+    if bert and scored:
+        f1 = bertscore_f1([u[ref_field] for u in scored],
+                          [u["_raw_hyp"] for u in scored],
+                          bert["model_type"], bert["device"])
+        for u, x in zip(scored, f1):
+            u["bertscore_f1"] = x
+
     def block(units):
-        return {
+        b = {
             "n_units": len(units),
             "wer_micro": round(micro_wer(units, "wer_c"), 4),
             "wer_macro": round(macro_wer(units, "wer_c"), 4),
             "cer_micro": round(micro_wer(units, "cer_c"), 4),
+            "hallucination_micro": round(hallucination_micro(units, "wer_c"), 4),
+            "hallucination_macro": round(hallucination_macro(units, "wer_c"), 4),
         }
+        bs = [u["bertscore_f1"] for u in units if "bertscore_f1" in u]
+        if bs:
+            b["bertscore_f1"] = round(sum(bs) / len(bs), 4)
+        return b
 
     stut = [u for u in scored if u["condition"] == "stuttered"]
     flu = [u for u in scored if u["condition"] == "fluent"]
@@ -211,9 +303,17 @@ def selftest() -> None:
     units = [{"wer_c": wer_counts("a b c d", "a b c d")},
              {"wer_c": wer_counts("a b c d", "a b x d")}]
     assert abs(micro_wer(units, "wer_c") - (1 / 8)) < 1e-9
+    # hallucination = I/N: one inserted word over 3 ref words
+    hu = [{"wer_c": wer_counts("a b c", "a b c d")}]
+    assert hu[0]["wer_c"][2] == 1 and abs(hallucination_micro(hu, "wer_c") - 1 / 3) < 1e-9
+    # per-ref-word ops: C C S, plus the extra hyp token is an insertion
+    ops, ins = align_ref_ops(["a", "b", "c"], ["a", "b", "x", "d"])
+    assert ops == ["C", "C", "S"] and ins == 1, (ops, ins)
+    o2, i2 = align_ref_ops(["a", "b", "c"], ["a", "c"])     # b deleted
+    assert o2 == ["C", "D", "C"] and i2 == 0, (o2, i2)
     n = get_normaliser()
     assert n("The CAT, sat!") .replace(".", "") != ""
-    print("selftest OK: WER/CER counts, micro aggregation, normaliser")
+    print("selftest OK: WER/CER, micro agg, hallucination, align_ref_ops, normaliser")
 
 
 def main() -> None:
@@ -223,6 +323,11 @@ def main() -> None:
     ap.add_argument("--hyp", type=Path)
     ap.add_argument("--out", type=Path)
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--bertscore", action="store_true",
+                    help="also compute BERTScore F1 (needs the bert-score pkg "
+                         "and a GPU; heavy — run when the GPUs are free)")
+    ap.add_argument("--bertscore-model", default="microsoft/deberta-xlarge-mnli")
+    ap.add_argument("--bertscore-device", default="cuda")
     args = ap.parse_args()
 
     if args.selftest:
@@ -237,10 +342,15 @@ def main() -> None:
              else "basic fallback normaliser")
     print(f"normaliser: {using}")
 
+    bert = ({"model_type": args.bertscore_model, "device": args.bertscore_device}
+            if args.bertscore else None)
+    if bert:
+        print(f"BERTScore: {args.bertscore_model} on {args.bertscore_device}")
+
     result = {"hyp_file": str(args.hyp), "normaliser": using, "by_reference": {}}
     for ref_field in ("reference_intended", "reference_surface"):
         result["by_reference"][ref_field] = score(
-            args.manifest, args.hyp, ref_field, norm)
+            args.manifest, args.hyp, ref_field, norm, bert)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2))
@@ -252,6 +362,11 @@ def main() -> None:
               f"macro={r['stuttered']['wer_macro']} (n={r['stuttered']['n_units']})")
         print(f"  fluent    WER micro={r['fluent']['wer_micro']} "
               f"macro={r['fluent']['wer_macro']} (n={r['fluent']['n_units']})")
+        print(f"  hallucination (I/N) stuttered={r['stuttered']['hallucination_micro']} "
+              f"fluent={r['fluent']['hallucination_micro']}")
+        if "bertscore_f1" in r["stuttered"]:
+            print(f"  BERTScore F1 stuttered={r['stuttered']['bertscore_f1']} "
+                  f"fluent={r['fluent'].get('bertscore_f1')}")
         g = r["gap_unit_level"]
         print(f"  gap (stut-flu macro WER) = {g['stuttered_minus_fluent_macro_wer']} "
               f"95%CI {g['ci95']}")

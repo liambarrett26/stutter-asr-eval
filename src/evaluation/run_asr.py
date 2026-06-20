@@ -107,6 +107,13 @@ def main() -> None:
                     help="never chunk (let the model handle long audio, "
                          "e.g. Whisper's native 30s windowing)")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--shard-index", type=int, default=0,
+                    help="this shard's id in [0, shard-count) — process only "
+                         "units where (position %% shard-count) == shard-index")
+    ap.add_argument("--shard-count", type=int, default=1,
+                    help="number of shards the manifest is split across (e.g. "
+                         "one per GPU). Shards are disjoint and round-robin by "
+                         "position, so each carries a balanced mix of long/short.")
     ap.add_argument("--audio-root-map", default="",
                     help="remap absolute audio paths across machines, "
                          "OLD=NEW (e.g. '/Volumes/FATSPEECH=/mnt/fatspeech'). "
@@ -125,6 +132,12 @@ def main() -> None:
         for u in units:
             if u.get("audio_path", "").startswith(old_root):
                 u["audio_path"] = new_root + u["audio_path"][len(old_root):]
+    if args.shard_count > 1:
+        if not (0 <= args.shard_index < args.shard_count):
+            ap.error("--shard-index must be in [0, --shard-count)")
+        units = [u for i, u in enumerate(units)
+                 if i % args.shard_count == args.shard_index]
+        print(f"shard {args.shard_index}/{args.shard_count}: {len(units)} units")
     if args.limit:
         units = units[: args.limit]
 
